@@ -3,9 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>名片搜集器 (正式版)</title>
+    <title>名片搜集器 (穩定版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    
+    <script>
+        window.onerror = function(msg, url, line, col, error) {
+            alert("❌ 系統錯誤：\n" + msg + "\n行數：" + line);
+            return false;
+        };
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+
     <style>
         .loading-spinner {
             border: 4px solid #f3f3f3;
@@ -25,6 +34,10 @@
 
     <div class="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden md:max-w-2xl p-6">
         <h1 class="text-2xl font-bold mb-4 text-center text-gray-800">名片搜集器</h1>
+        
+        <div class="text-center text-xs text-gray-400 mb-2">
+            系統狀態：<span id="js-status" class="text-green-600 font-bold">載入中...</span>
+        </div>
 
         <div class="mb-4 text-center">
             <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden">
@@ -34,35 +47,17 @@
             <img id="preview" class="mt-4 w-full h-auto rounded hidden border border-gray-300" />
         </div>
 
-        <div id="status" class="text-center text-sm text-gray-600 mb-4 h-6 font-bold">等待圖片...</div>
+        <div id="status" class="text-center text-sm text-gray-600 mb-4 h-6 font-bold">請選擇圖片</div>
 
         <form id="cardForm" class="space-y-3">
-            <div>
-                <label class="block text-sm font-medium text-gray-700">姓名</label>
-                <input type="text" id="name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 bg-gray-50" placeholder="等待辨識...">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700">公司名稱</label>
-                <input type="text" id="company" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 bg-gray-50">
-            </div>
+            <div><label class="block text-sm font-medium">姓名</label><input type="text" id="name" class="mt-1 block w-full border p-2 bg-gray-50"></div>
+            <div><label class="block text-sm font-medium">公司名稱</label><input type="text" id="company" class="mt-1 block w-full border p-2 bg-gray-50"></div>
             <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">電話 1</label>
-                    <input type="text" id="phone1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 bg-gray-50">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">電話 2</label>
-                    <input type="text" id="phone2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 bg-gray-50">
-                </div>
+                <div><label class="block text-sm font-medium">電話 1</label><input type="text" id="phone1" class="mt-1 block w-full border p-2 bg-gray-50"></div>
+                <div><label class="block text-sm font-medium">電話 2</label><input type="text" id="phone2" class="mt-1 block w-full border p-2 bg-gray-50"></div>
             </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700">Email</label>
-                <input type="email" id="email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 bg-gray-50">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700">備註</label>
-                <textarea id="remarks" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" placeholder="在此輸入拜訪紀錄..."></textarea>
-            </div>
+            <div><label class="block text-sm font-medium">Email</label><input type="text" id="email" class="mt-1 block w-full border p-2 bg-gray-50"></div>
+            <div><label class="block text-sm font-medium">備註</label><textarea id="remarks" rows="3" class="mt-1 block w-full border p-2"></textarea></div>
 
             <input type="hidden" id="imageBase64">
             <textarea id="rawText" class="hidden"></textarea>
@@ -74,8 +69,17 @@
     </div>
 
     <script>
-        // ⚠️⚠️⚠️ 請務必將下方網址換成你的 Google Apps Script 網址 ⚠️⚠️⚠️
-        const SCRIPT_URL = https://script.google.com/macros/s/AKfycbxSOgmMhUVUfvurWEoAdtO6sMqNYrSQ1adFTdLRGpYBrKEsOq3bx98FvxiEk0oeit6V/exec;
+        // ⬇️⬇️⬇️ 請在這裡填入你的 Google Apps Script 網址 ⬇️⬇️⬇️
+        const SCRIPT_URL = https://script.google.com/macros/s/AKfycbxSOgmMhUVUfvurWEoAdtO6sMqNYrSQ1adFTdLRGpYBrKEsOq3bx98FvxiEk0oeit6V/exec; 
+
+        // 檢查 JS 是否正常執行
+        window.onload = function() {
+            document.getElementById('js-status').innerText = "✅ 準備就緒";
+            if (typeof Tesseract === 'undefined') {
+                alert("⚠️ 警告：Tesseract OCR 模組載入失敗，請檢查網路。");
+                document.getElementById('js-status').innerText = "❌ OCR 載入失敗";
+            }
+        };
 
         const cameraInput = document.getElementById('cameraInput');
         const preview = document.getElementById('preview');
@@ -85,7 +89,7 @@
             const file = e.target.files[0];
             if (!file) return;
 
-            // 顯示圖片
+            // 1. 顯示預覽
             const reader = new FileReader();
             reader.onload = function(event) {
                 preview.src = event.target.result;
@@ -94,46 +98,46 @@
             };
             reader.readAsDataURL(file);
 
-            // 開始 OCR
-            statusDiv.innerHTML = '<div class="loading-spinner"></div>正在啟動辨識引擎(首次載入約需10秒)...';
+            // 2. 開始 OCR
+            statusDiv.innerHTML = '<div class="loading-spinner"></div>正在讀取文字...';
             
             try {
-                // 建立 Worker
-                const worker = await Tesseract.createWorker('chi_tra+eng', 1, {
+                // Tesseract v4 寫法
+                const worker = await Tesseract.createWorker({
                     logger: m => {
                         if(m.status === 'recognizing text') {
                             statusDiv.innerHTML = `<div class="loading-spinner"></div>辨識中... ${Math.round(m.progress * 100)}%`;
-                        } else {
-                            statusDiv.innerHTML = `<div class="loading-spinner"></div>系統狀態: ${m.status}`;
                         }
                     }
                 });
+                
+                await worker.loadLanguage('chi_tra+eng');
+                await worker.initialize('chi_tra+eng');
 
-                // 執行辨識
-                const result = await worker.recognize(file);
-                const text = result.data.text;
+                const { data: { text } } = await worker.recognize(file);
                 
-                // 辨識完成
                 await worker.terminate();
-                statusDiv.innerText = '✅ 辨識完成！請檢查並補充資料。';
+
+                statusDiv.innerText = '✅ 辨識完成！';
                 document.getElementById('rawText').value = text;
-                
                 parseCardData(text);
 
             } catch (error) {
                 console.error(error);
-                statusDiv.innerHTML = '<span style="color:red">❌ 辨識失敗，請確認網路連線。</span>';
-                alert('錯誤詳情：' + error.message);
+                statusDiv.innerHTML = '<span style="color:red">❌ 辨識發生錯誤</span>';
+                alert('錯誤：' + error.message);
             }
         });
 
-        // 解析資料邏輯
         function parseCardData(text) {
             const lines = text.split('\n').filter(line => line.trim() !== '');
+            
+            // Email
             const emailRegex = /[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}/;
             const emailMatch = text.match(emailRegex);
             if (emailMatch) document.getElementById('email').value = emailMatch[0];
 
+            // Phone
             const phoneRegex = /(?:\+?886|09|02|04)[0-9\-\s\(\)]{7,}/g;
             const phones = text.match(phoneRegex);
             if (phones) {
@@ -141,11 +145,12 @@
                 if(phones[1]) document.getElementById('phone2').value = phones[1].trim();
             }
 
+            // Name & Company Guess
             let nameFound = false;
             let companyFound = false;
             lines.forEach(line => {
                 if (line.includes('@') || line.includes('http')) return;
-                if (!companyFound && (line.includes('公司') || line.includes('Co.') || line.includes('Ltd') || line.includes('Inc'))) {
+                if (!companyFound && (line.includes('公司') || line.includes('Co.') || line.includes('Ltd'))) {
                     document.getElementById('company').value = line.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s\.\,]/g, '').trim();
                     companyFound = true;
                 } else if (!nameFound && line.length > 1 && line.length < 10 && !line.match(/[0-9]/)) {
@@ -155,18 +160,17 @@
             });
         }
 
-        // 上傳功能
         function submitData() {
             const btn = document.getElementById('saveBtn');
             const originalText = btn.innerText;
             
             if(!document.getElementById('imageBase64').value) {
-                alert("請先上傳名片圖片！");
+                alert("請先上傳圖片！");
                 return;
             }
 
             btn.disabled = true;
-            btn.innerText = '⏳ 資料上傳中...';
+            btn.innerText = '⏳ 上傳中...';
 
             const data = {
                 image: document.getElementById('imageBase64').value,
@@ -185,16 +189,16 @@
                 body: JSON.stringify(data)
             })
             .then(response => {
-                alert('🎉 資料已成功儲存到雲端！');
+                alert('🎉 儲存成功！');
                 btn.disabled = false;
                 btn.innerText = originalText;
                 document.getElementById('cardForm').reset();
                 document.getElementById('preview').classList.add('hidden');
-                document.getElementById('status').innerText = '等待圖片...';
+                document.getElementById('status').innerText = '請選擇圖片';
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('❌ 上傳失敗，請檢查 Script 網址或網路。');
+                alert('❌ 上傳失敗: ' + error);
                 btn.disabled = false;
                 btn.innerText = originalText;
             });
