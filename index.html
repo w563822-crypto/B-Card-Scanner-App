@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>名片搜集器 OCR (正式版)</title>
+    <title>名片搜集器 (正式版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
@@ -25,11 +25,6 @@
 
     <div class="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden md:max-w-2xl p-6">
         <h1 class="text-2xl font-bold mb-4 text-center text-gray-800">名片搜集器</h1>
-
-        <div id="protocolWarning" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-            <strong class="font-bold">⚠️ 執行環境錯誤！</strong>
-            <span class="block sm:inline">請勿直接開啟 HTML 檔案。請使用 VS Code Live Server 或上傳至網頁空間，否則 OCR 無法運作。</span>
-        </div>
 
         <div class="mb-4 text-center">
             <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden">
@@ -79,13 +74,8 @@
     </div>
 
     <script>
-        // 1. 設定 Google Apps Script 網址 (請換成你的)
+        // ⚠️⚠️⚠️ 請務必將下方網址換成你的 Google Apps Script 網址 ⚠️⚠️⚠️
         const SCRIPT_URL = https://script.google.com/macros/s/AKfycbxSOgmMhUVUfvurWEoAdtO6sMqNYrSQ1adFTdLRGpYBrKEsOq3bx98FvxiEk0oeit6V/exec;
-
-        // 2. 檢查是否為 file:// 協定 (若是則顯示警告)
-        if (window.location.protocol === 'file:') {
-            document.getElementById('protocolWarning').classList.remove('hidden');
-        }
 
         const cameraInput = document.getElementById('cameraInput');
         const preview = document.getElementById('preview');
@@ -95,7 +85,7 @@
             const file = e.target.files[0];
             if (!file) return;
 
-            // 顯示圖片預覽
+            // 顯示圖片
             const reader = new FileReader();
             reader.onload = function(event) {
                 preview.src = event.target.result;
@@ -104,8 +94,8 @@
             };
             reader.readAsDataURL(file);
 
-            // 開始 OCR 流程
-            statusDiv.innerHTML = '<div class="loading-spinner"></div>正在啟動辨識引擎...';
+            // 開始 OCR
+            statusDiv.innerHTML = '<div class="loading-spinner"></div>正在啟動辨識引擎(首次載入約需10秒)...';
             
             try {
                 // 建立 Worker
@@ -114,7 +104,7 @@
                         if(m.status === 'recognizing text') {
                             statusDiv.innerHTML = `<div class="loading-spinner"></div>辨識中... ${Math.round(m.progress * 100)}%`;
                         } else {
-                            statusDiv.innerHTML = `<div class="loading-spinner"></div>載入狀態: ${m.status}`;
+                            statusDiv.innerHTML = `<div class="loading-spinner"></div>系統狀態: ${m.status}`;
                         }
                     }
                 });
@@ -124,30 +114,26 @@
                 const text = result.data.text;
                 
                 // 辨識完成
-                await worker.terminate(); // 釋放資源
-                statusDiv.innerText = '✅ 辨識完成！請檢查資料。';
+                await worker.terminate();
+                statusDiv.innerText = '✅ 辨識完成！請檢查並補充資料。';
                 document.getElementById('rawText').value = text;
                 
-                // 解析資料
                 parseCardData(text);
 
             } catch (error) {
                 console.error(error);
-                statusDiv.innerHTML = '<span style="color:red">❌ 辨識失敗。請確認使用 Live Server 開啟。</span>';
-                alert('錯誤：' + error.message);
+                statusDiv.innerHTML = '<span style="color:red">❌ 辨識失敗，請確認網路連線。</span>';
+                alert('錯誤詳情：' + error.message);
             }
         });
 
-        // 解析名片文字邏輯
+        // 解析資料邏輯
         function parseCardData(text) {
             const lines = text.split('\n').filter(line => line.trim() !== '');
-            
-            // Email (包含常見錯誤修正)
             const emailRegex = /[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}/;
             const emailMatch = text.match(emailRegex);
             if (emailMatch) document.getElementById('email').value = emailMatch[0];
 
-            // 電話 (抓取 +886 或 09 開頭)
             const phoneRegex = /(?:\+?886|09|02|04)[0-9\-\s\(\)]{7,}/g;
             const phones = text.match(phoneRegex);
             if (phones) {
@@ -155,31 +141,25 @@
                 if(phones[1]) document.getElementById('phone2').value = phones[1].trim();
             }
 
-            // 簡單猜測姓名與公司
             let nameFound = false;
             let companyFound = false;
-
             lines.forEach(line => {
-                // 排除含有 @ 或 http 的行
                 if (line.includes('@') || line.includes('http')) return;
-
                 if (!companyFound && (line.includes('公司') || line.includes('Co.') || line.includes('Ltd') || line.includes('Inc'))) {
                     document.getElementById('company').value = line.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s\.\,]/g, '').trim();
                     companyFound = true;
                 } else if (!nameFound && line.length > 1 && line.length < 10 && !line.match(/[0-9]/)) {
-                    // 假設短於10字且無數字的是名字
                     document.getElementById('name').value = line.replace(/[^\u4e00-\u9fa5a-zA-Z\s]/g, '').trim();
                     nameFound = true;
                 }
             });
         }
 
-        // 上傳到 Google Sheets
+        // 上傳功能
         function submitData() {
             const btn = document.getElementById('saveBtn');
             const originalText = btn.innerText;
             
-            // 簡單驗證
             if(!document.getElementById('imageBase64').value) {
                 alert("請先上傳名片圖片！");
                 return;
@@ -214,7 +194,7 @@
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('❌ 上傳失敗，請檢查網路或 Script 網址。');
+                alert('❌ 上傳失敗，請檢查 Script 網址或網路。');
                 btn.disabled = false;
                 btn.innerText = originalText;
             });
