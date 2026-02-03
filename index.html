@@ -1,227 +1,207 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI 名片掃描器 (Gemini版)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* 隱藏預設的檔案上傳醜醜的按鈕 */
-        .hidden { display: none; }
-        /* 載入動畫 */
-        .loader {
-            border: 3px solid #f3f3f3;
-            border-radius: 50%;
-            border-top: 3px solid #3498db;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>名片歸檔助手 (手動版)</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+    .container { background-color: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    h2 { text-align: center; color: #333; }
+    
+    /* 圖片預覽區 */
+    #preview-container { width: 100%; height: 200px; background-color: #eee; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; overflow: hidden; border: 2px dashed #ccc; position: relative; }
+    #preview-img { max-width: 100%; max-height: 100%; display: none; }
+    #placeholder-text { color: #888; }
+    
+    /* 按鈕樣式 */
+    .btn { width: 100%; padding: 12px; margin-bottom: 15px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; transition: background 0.3s; }
+    .btn-upload { background-color: #4285f4; color: white; } /* 藍色 */
+    .btn-save { background-color: #34a853; color: white; display: none; } /* 綠色，預設隱藏 */
+    
+    /* 表單欄位 */
+    input, textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 16px; }
+    label { font-size: 14px; color: #666; font-weight: bold; display: block; margin-bottom: 5px; }
+    
+    /* 讀取動畫 */
+    #loading { display: none; text-align: center; color: #666; margin-bottom: 10px; }
+  </style>
 </head>
-<body class="bg-gray-100 min-h-screen p-4">
+<body>
 
-    <div class="max-w-md mx-auto bg-white rounded-xl shadow-lg overflow-hidden p-6">
-        <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">AI 名片掃描器 🤖</h1>
+<div class="container">
+  <h2>📇 名片歸檔 (手動輸入)</h2>
 
-        <div class="mb-6 flex justify-center">
-            <div class="relative w-full h-48 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden border-2 border-dashed border-gray-400">
-                <img id="preview" class="hidden w-full h-full object-contain" alt="名片預覽">
-                <span id="placeholder-text" class="text-gray-500">尚未選擇圖片</span>
-            </div>
-        </div>
+  <div id="preview-container" onclick="document.getElementById('fileInput').click()">
+    <span id="placeholder-text">點擊此處拍照或選圖</span>
+    <img id="preview-img">
+  </div>
+  <input type="file" id="fileInput" accept="image/*" style="display: none" onchange="handleFileSelect(event)">
 
-        <div id="ocr-status" class="text-center text-sm text-blue-600 font-medium mb-4 h-6">
-            請點擊下方按鈕拍攝或上傳
-        </div>
+  <button id="btnUpload" class="btn btn-upload" onclick="uploadImage()">📸 1. 上傳圖片 (存到 Drive)</button>
+  
+  <div id="loading">⏳ 正在上傳圖片到雲端硬碟...</div>
 
-        <label for="cameraInput" class="block w-full bg-indigo-600 text-white text-center font-bold py-3 px-4 rounded-lg cursor-pointer hover:bg-indigo-700 transition shadow-md mb-6">
-            📷 拍攝 / 選擇名片
-        </label>
-        <input type="file" id="cameraInput" accept="image/*" class="hidden">
-        <input type="hidden" id="imageBase64">
+  <div id="form-section" style="opacity: 0.5; pointer-events: none;"> 
+    <label>姓名 (Name)</label>
+    <input type="text" id="name" placeholder="請輸入姓名">
 
-        <div class="space-y-4">
-            <div>
-                <label class="block text-gray-700 text-sm font-bold mb-1">姓名 (Name)</label>
-                <input type="text" id="name" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:border-indigo-500" placeholder="AI 自動辨識...">
-            </div>
-            <div>
-                <label class="block text-gray-700 text-sm font-bold mb-1">公司 (Company)</label>
-                <input type="text" id="company" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:border-indigo-500" placeholder="AI 自動辨識...">
-            </div>
-            <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label class="block text-gray-700 text-sm font-bold mb-1">電話 1</label>
-                    <input type="text" id="phone1" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:border-indigo-500">
-                </div>
-                <div>
-                    <label class="block text-gray-700 text-sm font-bold mb-1">電話 2</label>
-                    <input type="text" id="phone2" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:border-indigo-500">
-                </div>
-            </div>
-            <div>
-                <label class="block text-gray-700 text-sm font-bold mb-1">Email</label>
-                <input type="email" id="email" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:border-indigo-500">
-            </div>
-            <div>
-                <label class="block text-gray-700 text-sm font-bold mb-1">備註 (Remarks)</label>
-                <textarea id="remarks" rows="2" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:border-indigo-500" placeholder="自行輸入備註..."></textarea>
-            </div>
-        </div>
+    <label>公司 (Company)</label>
+    <input type="text" id="company" placeholder="請輸入公司名稱">
 
-        <div class="mt-6">
-            <button id="analyzeBtn" onclick="analyzeImage()" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition duration-300 shadow-md">
-                🔍 開始 AI 辨識
-            </button>
+    <label>電話 1 (Mobile)</label>
+    <input type="text" id="phone1" placeholder="手機號碼">
 
-            <button id="saveBtn" onclick="saveFinalData()" class="hidden w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition duration-300 shadow-md">
-                ✅ 確認無誤並儲存
-            </button>
-        </div>
-    </div>
+    <label>電話 2 (Tel/Fax)</label>
+    <input type="text" id="phone2" placeholder="公司電話">
 
-    <script>
-        // ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
-        // 請將下方網址換成你的 Google Apps Script 部署網址 (結尾是 /exec)
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxSOgmMhUVUfvurWEoAdtO6sMqNYrSQ1adFTdLRGpYBrKEsOq3bx98FvxiEk0oeit6V/exec';
-        // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+    <label>Email</label>
+    <input type="email" id="email" placeholder="電子郵件">
 
-        const cameraInput = document.getElementById('cameraInput');
-        const preview = document.getElementById('preview');
-        const placeholder = document.getElementById('placeholder-text');
+    <label>備註 (Remarks)</label>
+    <textarea id="remarks" rows="3" placeholder="職稱、地址或其他備註"></textarea>
+
+    <button id="btnSave" class="btn btn-save" onclick="saveData()">💾 2. 確認存檔 (Save to Sheet)</button>
+  </div>
+</div>
+
+<script>
+  // ▼▼▼ 請把這裡換成您剛剛部署好的 GAS 網址 (以 /exec 結尾) ▼▼▼
+  const GAS_URL = "https://script.google.com/macros/s/您的GAS部署網址/exec"; 
+
+  let base64String = "";
+  let currentFileUrl = ""; // 存照片上傳後的 Drive 連結
+
+  // 1. 處理圖片選擇與壓縮
+  function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // 顯示預覽
+    const img = document.getElementById('preview-img');
+    img.src = URL.createObjectURL(file);
+    img.style.display = 'block';
+    document.getElementById('placeholder-text').style.display = 'none';
+
+    // 壓縮並轉 Base64
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const tempImg = new Image();
+      tempImg.onload = function() {
+        const canvas = document.createElement('canvas');
+        let width = tempImg.width;
+        let height = tempImg.height;
         
-        // 全域變數，用來暫存 AI 階段產生的圖片連結
-        let currentFileUrl = "";
-
-        // 監聽圖片選擇事件
-        cameraInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            // 顯示圖片預覽
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                preview.src = event.target.result;
-                preview.classList.remove('hidden');
-                placeholder.classList.add('hidden');
-                document.getElementById('imageBase64').value = event.target.result;
-                
-                // 重置介面狀態
-                document.getElementById('ocr-status').innerText = '📸 圖片已就緒，請按「AI 辨識」';
-                document.getElementById('analyzeBtn').classList.remove('hidden'); // 顯示辨識鈕
-                document.getElementById('saveBtn').classList.add('hidden');       // 隱藏儲存鈕
-                
-                // 清空欄位，避免混淆
-                document.getElementById('name').value = "";
-                document.getElementById('company').value = "";
-                document.getElementById('phone1').value = "";
-                document.getElementById('phone2').value = "";
-                document.getElementById('email').value = "";
-            };
-            reader.readAsDataURL(file);
-        });
-
-        // 階段一：呼叫後端 AI 進行辨識
-        function analyzeImage() {
-            if(!document.getElementById('imageBase64').value) {
-                alert("請先選擇圖片！");
-                return;
-            }
-
-            const btn = document.getElementById('analyzeBtn');
-            const originalText = btn.innerText;
-            btn.disabled = true;
-            btn.innerHTML = '<span class="loader inline-block mr-2"></span>AI 分析中...';
-
-            const data = {
-                action: 'analyze', // 告訴後端：我只要分析，不要存檔
-                image: document.getElementById('imageBase64').value,
-                fileName: `card_${Date.now()}.png`
-            };
-
-            fetch(SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify(data)
-            })
-            .then(res => res.json())
-            .then(response => {
-                if(response.result === 'success') {
-                    // 1. 記住後端回傳的圖片網址 (等等儲存要用)
-                    currentFileUrl = response.fileUrl;
-                    
-                    // 2. 把 AI 看到的資料填入格子
-                    const ai = response.aiData;
-                    document.getElementById('name').value = ai.name || "";
-                    document.getElementById('company').value = ai.company || "";
-                    document.getElementById('phone1').value = ai.phone1 || "";
-                    document.getElementById('phone2').value = ai.phone2 || "";
-                    document.getElementById('email').value = ai.email || "";
-
-                    document.getElementById('ocr-status').innerText = '✅ 分析完成！請檢查並修改資料';
-                    
-                    // 3. 切換按鈕：隱藏辨識鈕，顯示儲存鈕
-                    btn.classList.add('hidden');
-                    document.getElementById('saveBtn').classList.remove('hidden');
-                } else {
-                    alert('❌ 分析失敗: ' + response.error);
-                    document.getElementById('ocr-status').innerText = '❌ 分析失敗';
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                alert('❌ 連線錯誤，請檢查網路或 Script 網址');
-            })
-            .finally(() => {
-                btn.disabled = false;
-                btn.innerText = originalText;
-            });
+        // 縮圖以加快上傳 (最大寬度 1000px)
+        const MAX_WIDTH = 1000;
+        if (width > MAX_WIDTH) {
+          height *= MAX_WIDTH / width;
+          width = MAX_WIDTH;
         }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(tempImg, 0, 0, width, height);
+        
+        // 輸出 base64 (品質 0.7)
+        base64String = canvas.toDataURL('image/jpeg', 0.7);
+      }
+      tempImg.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
 
-        // 階段二：確認資料無誤，正式寫入 Google Sheet
-        function saveFinalData() {
-            const btn = document.getElementById('saveBtn');
-            const originalText = btn.innerText;
-            btn.disabled = true;
-            btn.innerHTML = '<span class="loader inline-block mr-2"></span>儲存中...';
+  // 2. 上傳圖片 (觸發 GAS 的 analyze 動作，但我們知道它只會存圖)
+  function uploadImage() {
+    if (!base64String) { alert("請先選擇圖片！"); return; }
+    
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('btnUpload').disabled = true;
+    document.getElementById('btnUpload').innerText = "上傳中...";
 
-            const data = {
-                action: 'save', // 告訴後端：我要存檔
-                fileUrl: currentFileUrl, // 傳送剛剛分析好的圖片網址
-                name: document.getElementById('name').value, // 傳送使用者可能修改過的資料
-                company: document.getElementById('company').value,
-                phone1: document.getElementById('phone1').value,
-                phone2: document.getElementById('phone2').value,
-                email: document.getElementById('email').value,
-                remarks: document.getElementById('remarks').value
-            };
+    fetch(GAS_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "analyze", // 這裡保持 analyze，對應後端的存圖邏輯
+        image: base64String,
+        fileName: "card_" + Date.now() + ".jpg"
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      document.getElementById('loading').style.display = 'none';
+      
+      if (data.result === "success") {
+        // 記錄 Drive 圖片連結
+        currentFileUrl = data.fileUrl;
+        
+        // 開啟表單編輯
+        const formSection = document.getElementById('form-section');
+        formSection.style.opacity = "1";
+        formSection.style.pointerEvents = "auto";
+        
+        // 顯示存檔按鈕，隱藏上傳按鈕
+        document.getElementById('btnSave').style.display = 'block';
+        document.getElementById('btnUpload').style.display = 'none';
+        
+        // 游標自動跳到姓名欄位
+        document.getElementById('name').focus();
+        
+        alert("✅ 圖片備份成功！請手動輸入名片資料。");
+      } else {
+        alert("上傳失敗: " + JSON.stringify(data));
+        document.getElementById('btnUpload').disabled = false;
+        document.getElementById('btnUpload').innerText = "📸 1. 上傳圖片";
+      }
+    })
+    .catch(error => {
+      alert("連線錯誤: " + error);
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('btnUpload').disabled = false;
+      document.getElementById('btnUpload').innerText = "📸 1. 上傳圖片";
+    });
+  }
 
-            fetch(SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify(data)
-            })
-            .then(res => res.json())
-            .then(response => {
-                if(response.result === 'success') {
-                    alert('🎉 資料已成功儲存至 Google Sheet！');
-                    location.reload(); // 重新整理頁面，準備下一張
-                } else {
-                    alert('❌ 儲存失敗: ' + response.error);
-                }
-            })
-            .catch(err => {
-                alert('❌ 連線錯誤');
-                console.error(err);
-            })
-            .finally(() => {
-                btn.disabled = false;
-                btn.innerText = originalText;
-            });
-        }
-    </script>
+  // 3. 存檔到 Sheet
+  function saveData() {
+    const payload = {
+      action: "save",
+      fileUrl: currentFileUrl,
+      name: document.getElementById('name').value,
+      company: document.getElementById('company').value,
+      phone1: document.getElementById('phone1').value,
+      phone2: document.getElementById('phone2').value,
+      email: document.getElementById('email').value,
+      remarks: document.getElementById('remarks').value
+    };
+
+    if(!payload.name) { alert("請至少輸入姓名！"); return; }
+
+    document.getElementById('btnSave').innerText = "存檔中...";
+    document.getElementById('btnSave').disabled = true;
+
+    fetch(GAS_URL, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.result === "success") {
+        alert("🎉 資料已成功存入 Google Sheet！");
+        location.reload(); // 重新整理頁面
+      } else {
+        alert("存檔失敗: " + JSON.stringify(data));
+        document.getElementById('btnSave').innerText = "💾 2. 確認存檔";
+        document.getElementById('btnSave').disabled = false;
+      }
+    })
+    .catch(err => {
+      alert("連線錯誤: " + err);
+      document.getElementById('btnSave').innerText = "💾 2. 確認存檔";
+      document.getElementById('btnSave').disabled = false;
+    });
+  }
+</script>
+
 </body>
 </html>
-
-
-
